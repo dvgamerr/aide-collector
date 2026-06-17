@@ -1,60 +1,36 @@
-# Aide Tokenizer
+# Aide Collector
 
-โปรเจคนี้ประกอบด้วย 2 ส่วนหลัก คือ `queue-sender` และ `queue-receiver` ที่ทำงานร่วมกันเพื่อจัดการระบบคิวข้อความและการประมวลผล
+REST API สำหรับเก็บ/เสิร์ฟข้อมูล (cinema, gold, lottery, reminder) พร้อมระบบ API token
+สร้างด้วย Elysia + Bun + Kysely (PostgreSQL)
 
 ## การติดตั้งเริ่มต้น
 
 ### 1. เตรียมฐานข้อมูล
 
-รันคำสั่งนี้เพื่อสร้างฐานข้อมูล:
+ตั้งค่า `DATABASE_URL` ใน `.env` (ดู `.env.example`) แล้วสตาร์ทเซิร์ฟเวอร์ —
+ตาราง schema จะถูกสร้างให้อัตโนมัติจาก `src/schema.sql` ตอน boot
 
 ```bash
-bun drizzle-kit migrate
-```
-
-### 2. ตั้งค่า Cloudflare Tunnel
-
-เข้าสู่ระบบและสร้าง tunnel:
-
-```bash
-cloudflared login
-cloudflared tunnel create dev
-cloudflared tunnel route dns dev proxy-3000.dvgamerr.app
-```
-
-### 3. สร้างไฟล์ config
-
-สร้างไฟล์ `.cloudflared/config.yml` พร้อมเนื้อหาดังนี้:
-
-```yaml
-tunnel: ac9b5a64-72db-4e7f-9efd-e3020d6c0f95
-credentials-file: ~/.cloudflared/ac9b5a64-72db-4e7f-9efd-e3020d6c0f95.json
-ingress:
-  - hostname: proxy-3000.dvgamerr.app
-    service: http://localhost:3000
-  - service: http_status:404
-```
-
-### 4. เริ่มต้น tunnel
-
-```bash
-cloudflared tunnel run dev
+docker compose up -d db   # postgres สำหรับ dev
+bun install
+bun dev
 ```
 
 ## ตัวแปรสภาพแวดล้อม
 
+- `DATABASE_URL`: connection string ของ PostgreSQL (จำเป็น)
 - `PORT`: พอร์ตที่เซิร์ฟเวอร์จะทำงาน (ค่าเริ่มต้น: 3000)
+- `LOG_LEVEL`: ระดับ log ของ pino (ค่าเริ่มต้น: info)
 
-## วิธีการติดตั้งและใช้งาน
+## Endpoints
 
-### ขั้นตอนการติดตั้ง:
+- `GET /health` — health check
+- `GET /collector/cinema` — ดึงข้อมูลหนังที่ฉาย (filter: genre, release_date, search, week, year)
+- `GET /collector/gold` — ราคาทอง + กำไร/ขาดทุนจากข้อมูลการลงทุน
+- `POST /stash/cinema` — upsert ข้อมูลหนัง
+- `PATCH /stash/gold` — ดึงราคาทองสดแล้วบันทึก
+- `POST /reminder/gold` — อัปเดตข้อมูลการลงทุนทอง
+- `GET /lottery` — ประวัติผลรางวัล (latest first)
+- `GET|POST /v1/token`, `DELETE /v1/revoke` — จัดการ API token (header `X-API-Key`)
 
-1. ตรวจสอบให้แน่ใจว่าได้ติดตั้ง PostgreSQL แล้วและกำลังทำงานอยู่
-2. สร้างตารางฐานข้อมูลโดยการรัน `queue-receiver`
-3. เริ่มต้น `queue-sender` เพื่อเริ่มประมวลผลข้อความ
-4. เริ่มต้นเซิร์ฟเวอร์ `queue-receiver` เพื่อรับข้อความที่เข้ามา
-
-### วิธีใช้งาน:
-
-- ส่ง POST request ไปที่ `/:channel/:bot_name` พร้อมข้อความที่ต้องการให้เข้าคิว
-- ใช้คำสั่ง `/id` และ `/raw` ในข้อความเพื่อรับการตอบกลับแบบเฉพาะเจาะจง
+API docs (Swagger): `GET /docs`

@@ -9,7 +9,7 @@ on:
     branches: ['main']
 
 jobs:
-  sender:
+  api:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -22,61 +22,8 @@ jobs:
 
     env:
       REGISTRY: ghcr.io
-      IMAGE_FILE: queue-sender/Dockerfile
-      IMAGE_NAME: queue-sender
-      PLATFORMS: linux/amd64,linux/arm64
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Prepare 🔰
-        id: prepare
-        run: |
-          echo "docker_image=${{env.REGISTRY}}/${{github.actor}}/$IMAGE_NAME" >> $GITHUB_OUTPUT
-
-          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          # # Strip "v" prefix from tag name
-          # [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=v$(echo $VERSION | sed -e 's/^v//')
-          # # Use Docker `latest` tag convention
-          [ "$VERSION" == "main" ] && VERSION=latest
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-          echo "buildx_args=--platform $PLATFORMS \
-            --build-arg VERSION=${VERSION} \
-            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-            --build-arg VERSION=$VERSION \
-            --tag ${{env.REGISTRY}}/${{github.actor}}/$IMAGE_NAME:$VERSION --file $IMAGE_FILE ." >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx 📐
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log into registry ${{ env.REGISTRY }} 🔍
-        if: success() && !contains(github.event_name, 'pull_request')
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Docker Push 📌
-        run: docker buildx build --output "type=image,push=${{ !contains(github.event_name, 'pull_request') }}" ${{ steps.prepare.outputs.buildx_args }}
-
-  receiver:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-
-    outputs:
-      docker_image: ${{ steps.prepare.outputs.docker_image }}
-      version: ${{ steps.prepare.outputs.version }}
-
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_FILE: queue-receiver/Dockerfile
-      IMAGE_NAME: queue-receiver
+      IMAGE_FILE: Dockerfile
+      IMAGE_NAME: aide-collector
       PLATFORMS: linux/amd64,linux/arm64
 
     steps:
@@ -89,16 +36,12 @@ jobs:
           echo "docker_image=${{env.REGISTRY}}/${{github.actor}}/${{ env.IMAGE_NAME }}" >> $GITHUB_OUTPUT
 
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          # # Strip "v" prefix from tag name
-          # [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=v$(echo $VERSION | sed -e 's/^v//')
-          # # Use Docker `latest` tag convention
           [ "$VERSION" == "main" ] && VERSION=latest
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
           echo "buildx_args=--platform $PLATFORMS \
             --build-arg VERSION=${VERSION} \
             --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-            --build-arg VERSION=$VERSION \
             --tag ${{env.REGISTRY}}/${{github.actor}}/$IMAGE_NAME:$VERSION --file $IMAGE_FILE ." >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx 📐
@@ -117,7 +60,7 @@ jobs:
 
   rollout:
     runs-on: ubuntu-24.04
-    needs: [sender, receiver]
+    needs: [api]
     if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
@@ -134,9 +77,8 @@ jobs:
           body: |
             ## What's Changed
 
-            🐳 **Docker Images:**
-            - `${{ needs.sender.outputs.docker_image }}:${{ needs.sender.outputs.version }}`
-            - `${{ needs.receiver.outputs.docker_image }}:${{ needs.receiver.outputs.version }}`
+            🐳 **Docker Image:**
+            - `${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}`
 
             Built from commit: ${{ github.sha }}
           draft: false
@@ -149,7 +91,7 @@ jobs:
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         with:
-          args: --insecure-skip-tls-verify=true set image ${{ env.KUBE_CONTAINER }} sender=${{ needs.sender.outputs.docker_image }}:${{ needs.sender.outputs.version }} receiver=${{ needs.receiver.outputs.docker_image }}:${{ needs.receiver.outputs.version }} -n ${{ env.KUBE_NAMESPACE }}
+          args: --insecure-skip-tls-verify=true set image ${{ env.KUBE_CONTAINER }} api=${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }} -n ${{ env.KUBE_NAMESPACE }}
 
       - name: Trigger deploy 🚀
         uses: actions-hub/kubectl@master
@@ -158,19 +100,12 @@ jobs:
         with:
           args: --insecure-skip-tls-verify=true rollout restart ${{ env.KUBE_CONTAINER }} -n ${{ env.KUBE_NAMESPACE }}
 
-      # - name: Status deployment 🔍
-      #   uses: actions-hub/kubectl@master
-      #   env:
-      #     KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
-      #   with:
-      #     args: --insecure-skip-tls-verify=true rollout status --timeout=180s ${{ env.KUBE_CONTAINER }} -n ${{ env.KUBE_NAMESPACE }}
-
       - name: Discord Alert
         if: success()
         uses: tsickert/discord-webhook@v5.3.0
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
-          content: '`${{ env.KUBE_CONTAINER }}` successfully rolled out image `${{ needs.receiver.outputs.docker_image }}:${{ needs.receiver.outputs.version }}`'
+          content: '`${{ env.KUBE_CONTAINER }}` successfully rolled out image `${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}`'
 
       - name: Fail Alert
         continue-on-error: true
