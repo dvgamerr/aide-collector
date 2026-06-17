@@ -59,4 +59,6 @@ export const swaggerConfig = {
     },
   },
   path: '/docs',
+  provider: 'scalar',
+  scalarConfig: { layout: 'modern', theme: 'default' },
 }
