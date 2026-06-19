@@ -1,7 +1,8 @@
-import { Elysia } from 'elysia'
+import { Elysia, t } from 'elysia'
 
 import { cinema } from './cinema'
 import { gold } from './gold'
+import { lottery, lotteryBulk } from './lottery'
 
 const route = new Elysia({ prefix: '/stash' })
 
@@ -10,6 +11,17 @@ route.patch('/gold', gold, {
 })
 route.post('/cinema', cinema, {
   detail: { description: 'Upsert cinema showing data and de-duplicate entries.', summary: 'Stash cinema showing', tags: ['Stash'] },
+})
+route.patch('/lottery', lottery, {
+  detail: { description: 'Fetch latest lottery draw from Thairath and upsert.', summary: 'Stash lottery', tags: ['Stash'] },
+})
+route.patch('/lottery/bulk', lotteryBulk, {
+  detail: {
+    description: 'Fetch all lottery draws from today back to the given date (sequential, 1 req/s).',
+    summary: 'Stash lottery bulk',
+    tags: ['Stash'],
+  },
+  query: t.Object({ date: t.String({ description: 'Target date YYYY-MM-DD to backfill to', examples: ['2025-01-01'] }) }),
 })
 
 export default route
