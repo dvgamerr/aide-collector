@@ -32,14 +32,6 @@ export const responseLogger = ({ code, path, request, response, status, store },
   logger[isError ? 'warn' : 'info'](`[${traceId}] [${code || response?.status || request.method}] ${path}${errorMsg}${duration}ms`)
 }
 
-export class BadRequestError extends Error {
-  constructor(status, message) {
-    super(message)
-    this.code = 'BAD_REQUEST'
-    this.status = status
-  }
-}
-
 export const swaggerConfig = {
   documentation: {
     components: {
@@ -60,5 +52,4 @@ export const swaggerConfig = {
   },
   path: '/docs',
   provider: 'scalar',
-  scalarConfig: { layout: 'modern', theme: 'default' },
 }

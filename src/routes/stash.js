@@ -53,17 +53,16 @@ const upsertCinema = async (db, body) => {
 const handleDuplicates = (cinemaRows) => {
   const mergeKey = []
   const uniqueKey = []
-  const seen = new Set()
+  const byName = new Map()
 
   for (const row of cinemaRows) {
-    const isDuplicate = seen.has(row.name_en) || seen.has(row.name_th)
-    if (isDuplicate) {
-      const existing = uniqueKey.find((e) => e.name_en === row.name_en || e.name_th === row.name_th)
-      if (existing) existing.theater = Object.assign(existing.theater, row.theater)
+    const existing = byName.get(row.name_en) || byName.get(row.name_th)
+    if (existing) {
+      existing.theater = Object.assign(existing.theater, row.theater)
       mergeKey.push(row)
     } else {
-      seen.add(row.name_en)
-      seen.add(row.name_th)
+      byName.set(row.name_en, row)
+      byName.set(row.name_th, row)
       uniqueKey.push(row)
     }
   }
@@ -105,7 +104,7 @@ const cinema = async ({ body, db, logger }) => {
   }
 }
 
-const gold = async ({ db }) => {
+const gold = async ({ db, logger }) => {
   try {
     const response = await fetch(GOLD_API, {
       headers: { 'Accept-Encoding': 'deflate, gzip;q=1.0, *;q=0.5', 'Content-Type': 'application/json; charset=utf-8' },
@@ -144,7 +143,7 @@ const gold = async ({ db }) => {
       success: true,
     })
   } catch (error) {
-    console.error('Error fetching gold data:', error)
+    logger.error({ error: error.message }, 'Error fetching gold data')
     return Response.json({ error: error.message, success: false }, { status: 500 })
   }
 }

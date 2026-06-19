@@ -1,11 +1,7 @@
 import { randomUUID } from 'crypto'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
 import { Elysia, t } from 'elysia'
 
-dayjs.extend(relativeTime)
-
-const MASTER_KEY = '0000-000-00000-0'
+const MASTER_KEY = process.env.MASTER_KEY
 
 export async function validateApiKey({ db, headers }) {
   const key = headers['x-api-key']?.trim()
@@ -14,17 +10,13 @@ export async function validateApiKey({ db, headers }) {
   const record = await db.selectFrom('api_keys').selectAll().where('api_key', '=', key).limit(1).executeTakeFirst()
   if (!record) return new Response(null, { status: 401 })
 
-  if (key === MASTER_KEY) {
-    await db.deleteFrom('api_keys').where('id', '=', record.id).execute()
-    return
-  }
+  if (MASTER_KEY && key === MASTER_KEY) return
 
   if (!record.is_active) return new Response(null, { status: 401 })
-  if (record.expires_at && new Date() > new Date(record.expires_at)) {
+  if (record.expires_at && Date.now() > +new Date(record.expires_at)) {
     await db.updateTable('api_keys').set({ is_active: false }).where('api_key', '=', key).execute()
     return new Response(null, { status: 401 })
   }
-  await db.updateTable('api_keys').set({ updated_at: new Date() }).where('api_key', '=', key).execute()
 }
 
 const route = new Elysia({ prefix: '/v1' })
@@ -38,7 +30,7 @@ route.get(
       .where('is_active', '=', true)
       .execute()
 
-    return tokens.map((token) => ({ ...token, updated_at: dayjs(token.updated_at).fromNow() }))
+    return tokens
   },
   {
     beforeHandle: validateApiKey,
@@ -60,7 +52,7 @@ route.post(
     beforeHandle: validateApiKey,
     body: t.Object({
       description: t.String({ description: 'description for the API token' }),
-      expiresAt: t.Optional(t.Null(t.String({ description: 'Optional expiration date in ISO format', format: 'date-time' }))),
+      expiresAt: t.Optional(t.String({ description: 'Optional expiration date in ISO format', format: 'date-time' })),
     }),
     detail: { description: 'Create a new API token.', summary: 'Create API token', tags: ['Token'] },
   },
@@ -73,7 +65,7 @@ route.delete(
   },
   {
     beforeHandle: validateApiKey,
-    detail: { description: 'Revoke an existing API token (sets it inactive).', summary: 'Revoke token', tags: ['Token'] },
+    detail: { description: "Revoke the caller's own API token (sets it inactive).", summary: 'Revoke token', tags: ['Token'] },
   },
 )
 

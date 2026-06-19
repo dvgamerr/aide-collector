@@ -5,14 +5,12 @@ import utc from 'dayjs/plugin/utc'
 import weekOfYear from 'dayjs/plugin/weekOfYear'
 import { Elysia, t } from 'elysia'
 import { sql } from 'kysely'
-import numeral from 'numeral'
 
 import { json } from '../db'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(weekOfYear)
-dayjs.extend(relativeTime)
 
 const cinema = async ({ db, query }) => {
   const { genre, release_date, search, week, year } = query
@@ -50,16 +48,11 @@ const cinema = async ({ db, query }) => {
   }))
 }
 
-const goldCalculator = (entries, market, key) =>
-  (entries || [])
-    .map((entry) => {
-      const cost = (entry.oz || 0) * (entry.usd || 0) + (entry.kg || 0) * (entry.usd || 0)
-      const spot = (entry.oz || 0) * parseFloat(market.tout) + (entry.kg || 0) * parseFloat(market.tout)
-      return { cost, profit: spot - cost, spot }
-    })
-    .reduce((total, e) => total + e[key], 0)
+const goldSpot = (entries, market) =>
+  (entries || []).reduce((total, entry) => total + (entry.oz || 0) * parseFloat(market.tout) + (entry.kg || 0) * parseFloat(market.tout), 0)
 
 const gold = async ({ db, logger, query, store }) => {
+  dayjs.extend(relativeTime)
   const traceId = store?.traceId
   const currency = query?.currency || 'USD'
 
@@ -95,14 +88,14 @@ const gold = async ({ db, logger, query, store }) => {
 
   const { deposit, gold96, gold99, wallet } = json(goldReminder.note)
 
-  const costTotal = goldCalculator(gold99, market, 'spot') + goldCalculator(gold96, market, 'spot')
+  const costTotal = goldSpot(gold99, market) + goldSpot(gold96, market)
   const depositTotal = deposit / market.usd_buy
   const profitTotal = costTotal + wallet - depositTotal
   const profitPercent = Math.round((profitTotal / depositTotal) * 100 * 100) / 100
 
   const trands = market.tout_ico === 'up' ? 'เพิ่มขึ้น' : 'ลดลง'
   logger.info(
-    `[${traceId}] 🪙 ${profitTotal > 0 ? 'กำไร' : 'ขาดทุน'} ${numeral(profitTotal * parseFloat(market.usd_sale)).format('0,0')} บาท (${profitTotal > 0 ? '+' : ''}${profitPercent}%) ราคา${trands} `,
+    `[${traceId}] 🪙 ${profitTotal > 0 ? 'กำไร' : 'ขาดทุน'} ${Math.round(profitTotal * parseFloat(market.usd_sale)).toLocaleString('th-TH')} บาท (${profitTotal > 0 ? '+' : ''}${profitPercent}%) ราคา${trands} `,
   )
 
   delete market.tin

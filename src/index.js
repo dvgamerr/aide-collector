@@ -1,7 +1,7 @@
 import { swagger } from '@elysiajs/swagger'
 import { Elysia } from 'elysia'
 
-import { logger, PORT, userAgent, version } from './config'
+import { logger, PORT, version } from './config'
 import { connect, db, destroy } from './db'
 import setupGracefulShutdown from './graceful'
 import { errorHandler, responseLogger, swaggerConfig, traceIdMiddleware } from './middleware'
@@ -20,7 +20,7 @@ const app = new Elysia()
   .use(swagger(swaggerConfig))
   .state('traceId', '')
   .onBeforeHandle(traceIdMiddleware.beforeHandle)
-  .decorate({ db, logger, userAgent })
+  .decorate({ db, logger })
   .onError((context) => errorHandler(context, logger))
   .onAfterResponse((context) => responseLogger(context, logger))
   .use(health)
