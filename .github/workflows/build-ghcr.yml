@@ -100,6 +100,7 @@ jobs:
           container run -d \
             --name ${{ env.CONTAINER_NAME }} \
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+            -e MEA_PAYLOAD=${{ secrets.MEA_PAYLOAD }} \
             -p 3001:3000 \
             ${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}
 
